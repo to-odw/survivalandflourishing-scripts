@@ -1,95 +1,100 @@
-// Function to make grid tables sortable
-function makeGridSortable() {
-    // Find all elements with the table-sort attribute
-    document.querySelectorAll('.in-grid[table-sort]').forEach(header => {
-        console.log('Processing header:', header); // Log each header being processed
+// Function to make both grid and table sortable
+function makeSortable() {
+    document.querySelectorAll('[table-sort]').forEach(header => {
+        console.log('Processing header:', header);
 
-        // Get the value of the table-sort attribute
-        const sortValue = header.getAttribute('table-sort');
-        const colCount = parseInt(sortValue, 10);
+        // Get the column index
+        const colIndex = Array.from(header.parentNode.children).indexOf(header);
+        if (colIndex === -1) return;
 
-        // Disable sorting if table-sort is 0
-        if (colCount === 0 || isNaN(colCount)) {
-            console.log('Sorting disabled for this header.');
-            return;
-        }
-
-        console.log('Column count:', colCount);
-
-        // Add a click event listener to the header
         header.addEventListener('click', () => {
             console.log(`Header clicked: ${header.textContent.trim()}`);
 
-            // Find the grid container (parent element with grid layout)
+            const table = header.closest('table');
             const grid = header.closest('.w-layout-grid');
-            if (!grid) {
-                console.error('Grid container not found for header:', header);
-                return;
+
+            if (table) {
+                sortTable(table, colIndex, header);
+            } else if (grid) {
+                sortGrid(grid, colIndex, header);
             }
-
-            // Get all rows as arrays of cells (skip headers)
-            const rows = Array.from(grid.children).filter(child => !child.classList.contains('is-header'));
-            console.log('Rows before grouping:', rows);
-
-            // Group cells into rows based on colCount
-            const groupedRows = [];
-            for (let i = 0; i < rows.length; i += colCount) {
-                groupedRows.push(rows.slice(i, i + colCount));
-            }
-            console.log('Grouped rows:', groupedRows);
-
-            // Determine column index
-            const colIndex = Array.from(grid.children).filter(child => child.classList.contains('is-header')).indexOf(header);
-            if (colIndex === -1) {
-                console.error('Column index not found for header:', header);
-                return;
-            }
-            console.log('Column index:', colIndex);
-
-            // Rotate sort state stored on the header element
-            let sortState = parseInt(header.getAttribute('data-sort-state') || '-1', 10);
-            sortState = sortState === -1 ? 0 : (sortState === 0 ? 1 : 0); // First click ascending, then toggle
-            header.setAttribute('data-sort-state', sortState);
-            console.log('Updated sort state:', sortState);
-
-            // Sort rows based on the content of the clicked column
-            if (sortState < 2) {
-                groupedRows.sort((rowA, rowB) => {
-                    const cellA = rowA[colIndex].textContent.trim();
-                    const cellB = rowB[colIndex].textContent.trim();
-
-                    let comparison;
-                    // Compare as numbers if both are numeric, otherwise as strings
-                    if (!isNaN(cellA) && !isNaN(cellB)) {
-                        comparison = parseFloat(cellA) - parseFloat(cellB);
-                    } else {
-                        comparison = cellA.localeCompare(cellB, undefined, { numeric: true });
-                    }
-
-                    return sortState === 0 ? comparison : -comparison; // Ascending or Descending
-                });
-            } else {
-                // Reset to original order
-                groupedRows.sort((rowA, rowB) => {
-                    const indexA = rows.indexOf(rowA[0]);
-                    const indexB = rows.indexOf(rowB[0]);
-                    return indexA - indexB;
-                });
-                console.log('Reset to original order:', groupedRows);
-            }
-
-            // Clear the grid content (excluding headers)
-            rows.forEach(row => grid.removeChild(row));
-
-            // Append the sorted rows back to the grid
-            groupedRows.forEach(row => {
-                row.forEach(cell => grid.appendChild(cell));
-            });
-
-            console.log('Grid updated with sorted rows.');
         });
     });
 }
 
-// Initialize sortable grids on DOMContentLoaded
-document.addEventListener('DOMContentLoaded', makeGridSortable);
+// Function to sort table rows, pushing blanks to the bottom
+function sortTable(table, colIndex, header) {
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    let rows = Array.from(tbody.querySelectorAll('tr'));
+    let sortState = parseInt(header.getAttribute('data-sort-state') || '-1', 10);
+    sortState = sortState === -1 ? 0 : (sortState === 0 ? 1 : 0);
+    header.setAttribute('data-sort-state', sortState);
+
+    rows.sort((rowA, rowB) => {
+        let cellA = rowA.children[colIndex].textContent.trim();
+        let cellB = rowB.children[colIndex].textContent.trim();
+
+        // Handle empty values: push them to the bottom
+        if (!cellA && !cellB) return 0;
+        if (!cellA) return 1;
+        if (!cellB) return -1;
+
+        let comparison;
+        if (!isNaN(cellA.replace(/[$,]/g, '')) && !isNaN(cellB.replace(/[$,]/g, ''))) {
+            comparison = parseFloat(cellA.replace(/[$,]/g, '')) - parseFloat(cellB.replace(/[$,]/g, ''));
+        } else {
+            comparison = cellA.localeCompare(cellB, undefined, { numeric: true });
+        }
+
+        return sortState === 0 ? comparison : -comparison;
+    });
+
+    rows.forEach(row => tbody.appendChild(row));
+}
+
+// Function to sort grid rows, pushing blanks to the bottom
+function sortGrid(grid, colIndex, header) {
+    const rows = Array.from(grid.children).filter(child => !child.classList.contains('is-header'));
+    const colCount = parseInt(header.getAttribute('table-sort'), 10);
+
+    if (isNaN(colCount) || colCount === 0) {
+        console.error('Invalid column count for sorting.');
+        return;
+    }
+
+    const groupedRows = [];
+    for (let i = 0; i < rows.length; i += colCount) {
+        groupedRows.push(rows.slice(i, i + colCount));
+    }
+
+    let sortState = parseInt(header.getAttribute('data-sort-state') || '-1', 10);
+    sortState = sortState === -1 ? 0 : (sortState === 0 ? 1 : 0);
+    header.setAttribute('data-sort-state', sortState);
+
+    groupedRows.sort((rowA, rowB) => {
+        const cellA = rowA[colIndex]?.textContent.trim() || "";
+        const cellB = rowB[colIndex]?.textContent.trim() || "";
+
+        // Handle empty values: push them to the bottom
+        if (!cellA && !cellB) return 0;
+        if (!cellA) return 1;
+        if (!cellB) return -1;
+
+        let comparison;
+        if (!isNaN(cellA.replace(/[$,]/g, '')) && !isNaN(cellB.replace(/[$,]/g, ''))) {
+            comparison = parseFloat(cellA.replace(/[$,]/g, '')) - parseFloat(cellB.replace(/[$,]/g, ''));
+        } else {
+            comparison = cellA.localeCompare(cellB, undefined, { numeric: true });
+        }
+
+        return sortState === 0 ? comparison : -comparison;
+    });
+
+    rows.forEach(row => grid.removeChild(row));
+    groupedRows.forEach(row => row.forEach(cell => grid.appendChild(cell)));
+}
+
+// Initialize sortable tables and grids on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', makeSortable);
